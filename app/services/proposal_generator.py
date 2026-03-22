@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Dict, Optional
 from app.services.price_list_reader import read_price_list
 
 def generate_proposal_text(
@@ -8,23 +8,21 @@ def generate_proposal_text(
     additional_params: dict = None
 ) -> str:
     """
-    Генерация текста КП с использованием данных прайс-листа (если он загружен).
-    Если прайс-лист не передан, возвращает заглушку.
+    Генерация текста КП с использованием данных прайс-листа.
     """
-    # Базовый текст
     text = f"Сформировано предложение для региона {region}, специализация {specialization}.\n"
 
-    # Если есть прайс-лист, добавляем позиции
     if price_list_path:
         try:
             items = read_price_list(price_list_path)
             if items:
                 text += "\nПредлагаемая техника и запчасти:\n"
-                for item in items:
-                    # Предполагаем колонки "Наименование" и "Цена, руб" (можно адаптировать)
-                    name = item.get("Наименование", "Название не указано")
-                    price = item.get("Цена, руб", "цена не указана")
+                for item in items[:10]:  # показываем не больше 10 позиций
+                    name = item.get("name") or item.get("Наименование", "Название не указано")
+                    price = item.get("price") or item.get("Цена, руб", "цена не указана")
                     text += f"- {name}: {price} руб.\n"
+                if len(items) > 10:
+                    text += f"... и еще {len(items) - 10} позиций.\n"
             else:
                 text += "Прайс-лист пуст или не содержит данных.\n"
         except Exception as e:

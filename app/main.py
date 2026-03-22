@@ -6,6 +6,7 @@ from docx import Document
 from app.services.llm_service import get_llm_response
 from app.db.init_db import init_db
 from app.services.proposal_service import save_proposal
+from app.services.proposal_generator import generate_proposal_text
 
 load_dotenv()
 
@@ -44,7 +45,6 @@ class ProposalRequest(BaseModel):
 
 @app.post("/generate-proposal")
 async def generate_proposal(request: ProposalRequest):
-    # Заглушка: сохраняем запись в БД, но реальный файл пока не создаём
     file_path = f"data/proposals/proposal_{request.client_inn}.docx"
     proposal_id = save_proposal(request.client_inn, file_path)
     return {
@@ -60,7 +60,6 @@ async def generate_proposal(request: ProposalRequest):
 
 @app.post("/create-test-doc")
 async def create_test_doc():
-    # Создаём простой тестовый DOC-файл
     doc = Document()
     doc.add_heading('Тестовый документ', level=1)
     doc.add_paragraph('Этот файл создан с помощью python-docx.')
@@ -82,17 +81,29 @@ async def generate_from_template(
     template_name: str,
     client_name: str = "Клиент",
     region: str = "Регион",
-    specialization: str = "Специализация"
+    specialization: str = "Специализация",
+    price_list_name: str = None,
+    additional_params: dict = None
 ):
-    # Проверяем, существует ли шаблон в папке uploads
     template_path = os.path.join(UPLOAD_DIR, template_name)
     if not os.path.exists(template_path):
         raise HTTPException(status_code=404, detail="Шаблон не найден")
 
-    # Открываем шаблон
+    price_list_path = None
+    if price_list_name:
+        price_list_path = os.path.join(UPLOAD_DIR, price_list_name)
+        if not os.path.exists(price_list_path):
+            raise HTTPException(status_code=404, detail="Прайс-лист не найден")
+
+    proposal_text = generate_proposal_text(
+        region=region,
+        specialization=specialization,
+        price_list_path=price_list_path,
+        additional_params=additional_params
+    )
+
     doc = Document(template_path)
 
-    # Заменяем плейсхолдеры во всех параграфах
     for paragraph in doc.paragraphs:
         if "{{client_name}}" in paragraph.text:
             paragraph.text = paragraph.text.replace("{{client_name}}", client_name)
@@ -100,8 +111,9 @@ async def generate_from_template(
             paragraph.text = paragraph.text.replace("{{region}}", region)
         if "{{specialization}}" in paragraph.text:
             paragraph.text = paragraph.text.replace("{{specialization}}", specialization)
+        if "{{proposal_text}}" in paragraph.text:
+            paragraph.text = paragraph.text.replace("{{proposal_text}}", proposal_text)
 
-    # Заменяем плейсхолдеры в таблицах
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
@@ -111,8 +123,9 @@ async def generate_from_template(
                     cell.text = cell.text.replace("{{region}}", region)
                 if "{{specialization}}" in cell.text:
                     cell.text = cell.text.replace("{{specialization}}", specialization)
+                if "{{proposal_text}}" in cell.text:
+                    cell.text = cell.text.replace("{{proposal_text}}", proposal_text)
 
-    # Сохраняем результат
     os.makedirs("data/proposals", exist_ok=True)
     output_filename = f"proposal_{client_name}.docx"
     output_path = os.path.join("data/proposals", output_filename)

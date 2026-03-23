@@ -157,4 +157,13 @@ async def save_order(order: OrderRequest):
     # Используем model_dump_json() вместо json()
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(order.model_dump_json(indent=2, ensure_ascii=False))
+from fastapi.responses import FileResponse
+
+@app.get("/download/{file_path:path}")
+async def download_file(file_path: str):
+    # Проверяем, существует ли файл
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    # Возвращаем файл для скачивания
+    return FileResponse(file_path, filename=os.path.basename(file_path))
     return {"status": "ok", "filename": filename}

@@ -54,10 +54,9 @@ if submitted:
 if st.session_state.last_order:
     if st.button("Сформировать коммерческое предложение по этой заявке"):
         order = st.session_state.last_order
-        # Формируем запрос к /generate-from-template
         params = {
             "template_name": "template.docx",
-            "client_name": order["model"],  # используем модель как название клиента
+            "client_name": order["model"],
             "region": "Московская область",
             "specialization": "запчасти",
             "price_list_name": "price_test.xlsx",
@@ -72,8 +71,8 @@ if st.session_state.last_order:
             if response.status_code == 200:
                 data = response.json()
                 st.success(f"КП сгенерировано! Файл: {data['output_file']}")
-                # Ссылка для скачивания (пока просто текст)
-                st.info(f"Скачать файл можно по пути: {data['output_file']}")
+                download_url = f"{API_URL}/download/{data['output_file']}"
+                st.markdown(f"[Скачать файл]({download_url})")
             else:
                 st.error(f"Ошибка генерации КП: {response.status_code}")
         except Exception as e:

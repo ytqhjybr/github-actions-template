@@ -19,6 +19,8 @@ with st.form("order_form"):
     year = st.text_input("Год выпуска", placeholder="2020")
     description = st.text_area("Описание проблемы или нужных запчастей", height=100)
     photo = st.file_uploader("Фото (необязательно)", type=["jpg", "jpeg", "png"])
+    region = st.selectbox("Регион", ["Московская область", "Ленинградская область", "Краснодарский край"])
+    specialization = st.selectbox("Специализация", ["растениеводство", "животноводство", "смешанное"])
     submitted = st.form_submit_button("Отправить заявку")
 
 if submitted:
@@ -36,7 +38,9 @@ if submitted:
             "model": model,
             "year": year,
             "description": description,
-            "photo_path": photo_path
+            "photo_path": photo_path,
+            "region": region,
+            "specialization": specialization
         }
         try:
             response = requests.post(f"{API_URL}/save-order", json=payload)
@@ -57,8 +61,8 @@ if st.session_state.last_order:
         params = {
             "template_name": "template.docx",
             "client_name": order["model"],
-            "region": "Московская область",
-            "specialization": "запчасти",
+            "region": order["region"],
+            "specialization": order["specialization"],
             "price_list_name": "price_test.xlsx",
             "additional_params": {
                 "vin": order["vin"],

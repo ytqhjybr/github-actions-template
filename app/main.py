@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
+from typing import Optional
 from docx import Document
 from app.services.llm_service import get_llm_response
 from app.db.init_db import init_db
@@ -136,3 +137,24 @@ async def generate_from_template(
         "output_file": output_path,
         "message": f"КП создано из шаблона {template_name}"
     }
+
+# ========== НОВЫЙ ЭНДПОИНТ ДЛЯ ЗАЯВОК ==========
+
+class OrderRequest(BaseModel):
+    vin: str
+    model: str
+    year: str
+    description: str
+    photo_path: Optional[str] = None
+
+@app.post("/save-order")
+async def save_order(order: OrderRequest):
+    import json
+    from datetime import datetime
+    os.makedirs("data/orders", exist_ok=True)
+    filename = f"order_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    file_path = os.path.join("data/orders", filename)
+    # Используем model_dump_json() вместо json()
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(order.model_dump_json(indent=2, ensure_ascii=False))
+    return {"status": "ok", "filename": filename}

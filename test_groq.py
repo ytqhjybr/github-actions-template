@@ -1,20 +1,18 @@
-import os
-from openai import OpenAI
+from groq import Groq
 
-# Укажите ключ явно (замените на ваш ключ gsk_...)
-api_key = "gsk_..."  # вставьте сюда один из ваших ключей
+# Ваш новый ключ
+API_KEY = "gsk_..."  # ваш ключ (не публикуйте)
 
-client = OpenAI(
-    api_key=api_key,
-    base_url="https://api.groq.com/openai/v1"
-)
+client = Groq(api_key=API_KEY)
 
 try:
     completion = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[{"role": "user", "content": "Привет"}],
-        max_tokens=10
+        messages=[{"role": "user", "content": "Привет! Напиши слово 'успех'."}],
+        model="llama-3.1-8b-instant",
+        temperature=0.5,
+        max_tokens=20,
     )
-    print("Ответ:", completion.choices[0].message.content)
+    print("Ответ Groq:")
+    print(completion.choices[0].message.content)
 except Exception as e:
-    print("Ошибка:", e)
+    print(f"Ошибка: {e}")

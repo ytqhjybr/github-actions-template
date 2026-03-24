@@ -1,7 +1,7 @@
 # AI-ассистенты для дилера сельхозтехники
 ![Avatar](assets/avatar-tractor.png)
 Демо-модель системы модульных ИИ-ассистентов для автоматизации процессов дилера сельскохозяйственной техники.
-
+[![Run tests](https://github.com/ytqhjybr/github-actions-template/actions/workflows/test.yml/badge.svg)](https://github.com/ytqhjybr/github-actions-template/actions/workflows/test.yml)
 ## Модули
 - Модуль 1: Ассистент продавца техники (формирование КП)
 - Модуль 2: Ассистент продавца запчастей

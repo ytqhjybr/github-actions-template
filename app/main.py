@@ -4,42 +4,21 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from docx import Document
+from app.services.llm_service import get_llm_response
+from app.db.init_db import init_db
+from app.services.proposal_service import save_proposal
+from app.services.proposal_generator import generate_proposal_text
+from app.services.rag_service import index_pdf, search_pdf
+from app.services.purchase_assistant import analyze_stock
 
 load_dotenv()
 
 app = FastAPI(title="AI Assistants for Agricultural Dealer")
+init_db()
 
-# Пытаемся импортировать сервисы с обработкой ошибок
-try:
-    from app.services.llm_service import get_llm_response
-except ImportError:
-    get_llm_response = None
-    print("Предупреждение: llm_service не загружен")
-
-try:
-    from app.db.init_db import init_db
-    init_db()
-except ImportError:
-    print("Предупреждение: init_db не загружен")
-
-try:
-    from app.services.proposal_service import save_proposal
-except ImportError:
-    save_proposal = None
-    print("Предупреждение: proposal_service не загружен")
-
-try:
-    from app.services.proposal_generator import generate_proposal_text
-except ImportError:
-    generate_proposal_text = None
-    print("Предупреждение: proposal_generator не загружен")
-
-try:
-    from app.services.rag_service import index_pdf, search_pdf
-except ImportError:
-    index_pdf = None
-    search_pdf = None
-    print("Предупреждение: rag_service не загружен")
+# ========== ОБЩИЕ НАСТРОЙКИ ==========
+UPLOAD_DIR = "data/uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # ========== ЭНДПОИНТЫ ==========
 
@@ -58,9 +37,6 @@ async def test_llm(prompt: str):
         return {"prompt": prompt, "response": response}
     return {"prompt": prompt, "response": "LLM сервис не доступен"}
 
-UPLOAD_DIR = "data/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     file_path = os.path.join(UPLOAD_DIR, file.filename)
@@ -78,9 +54,7 @@ class ProposalRequest(BaseModel):
 @app.post("/generate-proposal")
 async def generate_proposal(request: ProposalRequest):
     file_path = f"data/proposals/proposal_{request.client_inn}.docx"
-    proposal_id = None
-    if save_proposal:
-        proposal_id = save_proposal(request.client_inn, file_path)
+    proposal_id = save_proposal(request.client_inn, file_path) if save_proposal else None
     return {
         "status": "generated",
         "proposal_id": proposal_id,
@@ -265,3 +239,46 @@ async def ask_rag(query: str):
         "found_chunks": fragments,
         "answer": answer
     }
+
+# ========== НОВЫЙ ЭНДПОИНТ ДЛЯ МОДУЛЯ 4 ==========
+@app.post("/analyze-stock")
+async def analyze_stock_endpoint(
+    stock_file: UploadFile = File(...),
+    orders_file: Optional[UploadFile] = None,
+    in_transit_file: Optional[UploadFile] = None,
+    sales_file: Optional[UploadFile] = None,
+    safety_stock_formula: str = "mean_sales * 2 + min_stock"
+):
+    # Сохраняем загруженные файлы
+    stock_path = os.path.join(UPLOAD_DIR, stock_file.filename)
+    with open(stock_path, "wb") as f:
+        f.write(await stock_file.read())
+    
+    orders_path = None
+    if orders_file:
+        orders_path = os.path.join(UPLOAD_DIR, orders_file.filename)
+        with open(orders_path, "wb") as f:
+            f.write(await orders_file.read())
+    
+    in_transit_path = None
+    if in_transit_file:
+        in_transit_path = os.path.join(UPLOAD_DIR, in_transit_file.filename)
+        with open(in_transit_path, "wb") as f:
+            f.write(await in_transit_file.read())
+    
+    sales_path = None
+    if sales_file:
+        sales_path = os.path.join(UPLOAD_DIR, sales_file.filename)
+        with open(sales_path, "wb") as f:
+            f.write(await sales_file.read())
+    
+    # Анализируем
+    result = analyze_stock(
+        stock_path,
+        orders_path,
+        in_transit_path,
+        sales_path,
+        safety_stock_formula
+    )
+    
+    return result

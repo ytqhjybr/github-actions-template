@@ -9,14 +9,13 @@ st.set_page_config(page_title="AI Ассистенты для дилера", lay
 
 # --- Боковое меню ---
 st.sidebar.title("Модули")
-page = st.sidebar.radio("Выберите модуль", ["Заявки и КП", "Сервисный ассистент (RAG)"])
+page = st.sidebar.radio("Выберите модуль", ["Заявки и КП", "Сервисный ассистент (RAG)", "Ассистент закупщика"])
 
 # ===================== СТРАНИЦА 1: ЗАЯВКИ И КП =====================
 if page == "Заявки и КП":
     st.title("📝 Оформление заявки на запчасти")
     st.markdown("Заполните форму, и наш ассистент обработает ваш запрос.")
 
-    # Сессия для хранения данных последней заявки
     if "last_order" not in st.session_state:
         st.session_state.last_order = None
 
@@ -63,7 +62,6 @@ if page == "Заявки и КП":
             except Exception as e:
                 st.error(f"Не удалось соединиться с сервером: {e}")
 
-    # Кнопка для генерации КП, если есть сохранённая заявка
     if st.session_state.last_order:
         if st.button("Сформировать коммерческое предложение по этой заявке"):
             order = st.session_state.last_order
@@ -96,7 +94,6 @@ elif page == "Сервисный ассистент (RAG)":
     st.title("🔧 Ассистент сервисного инженера")
     st.markdown("Загрузите руководства по ремонту и эксплуатации, затем задавайте вопросы.")
 
-    # --- Загрузка PDF ---
     st.subheader("📄 Загрузка руководства")
     uploaded_pdf = st.file_uploader("Выберите PDF-файл", type=["pdf"])
 
@@ -112,7 +109,6 @@ elif page == "Сервисный ассистент (RAG)":
         except Exception as e:
             st.error(f"Ошибка соединения: {e}")
 
-    # --- Запрос к RAG ---
     st.subheader("❓ Задайте вопрос по руководствам")
     query = st.text_input("Ваш вопрос:", placeholder="Как заменить масло в двигателе?")
     if st.button("Получить ответ"):
@@ -133,3 +129,48 @@ elif page == "Сервисный ассистент (RAG)":
                     st.error(f"Ошибка: {response.status_code}")
             except Exception as e:
                 st.error(f"Ошибка соединения: {e}")
+
+# ===================== СТРАНИЦА 3: АССИСТЕНТ ЗАКУПЩИКА =====================
+elif page == "Ассистент закупщика":
+    st.title("📊 Ассистент закупщика")
+    st.markdown("Загрузите файлы с данными для анализа и получите рекомендации по закупке.")
+
+    with st.form("purchase_form"):
+        stock_file = st.file_uploader("Остатки на складе (Excel)", type=["xlsx"])
+        orders_file = st.file_uploader("Заказы клиентов (Excel, необязательно)", type=["xlsx"])
+        in_transit_file = st.file_uploader("Заказы в пути (Excel, необязательно)", type=["xlsx"])
+        sales_file = st.file_uploader("Статистика продаж (Excel, необязательно)", type=["xlsx"])
+        safety_formula = st.text_input("Формула минимального остатка", value="mean_sales * 2 + min_stock")
+        submitted = st.form_submit_button("Анализировать")
+
+    if submitted and stock_file:
+        files = {"stock_file": stock_file}
+        if orders_file:
+            files["orders_file"] = orders_file
+        if in_transit_file:
+            files["in_transit_file"] = in_transit_file
+        if sales_file:
+            files["sales_file"] = sales_file
+        params = {"safety_stock_formula": safety_formula}
+
+        try:
+            response = requests.post(f"{API_URL}/analyze-stock", params=params, files=files)
+            if response.status_code == 200:
+                data = response.json()
+                if "error" in data:
+                    st.error(data["error"])
+                else:
+                    st.success("Анализ выполнен!")
+                    st.subheader("Рекомендуемый список закупки")
+                    if data.get("purchase_list"):
+                        st.dataframe(data["purchase_list"])
+                    else:
+                        st.info("Ничего не требуется закупать.")
+                    with st.expander("Показать полные данные"):
+                        st.json(data["full_data"])
+            else:
+                st.error(f"Ошибка: {response.status_code}")
+        except Exception as e:
+            st.error(f"Ошибка соединения: {e}")
+    elif submitted and not stock_file:
+        st.error("Файл остатков обязателен.")

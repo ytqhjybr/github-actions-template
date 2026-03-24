@@ -1,6 +1,7 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 from docx import Document
@@ -10,10 +11,21 @@ from app.services.proposal_service import save_proposal
 from app.services.proposal_generator import generate_proposal_text
 from app.services.rag_service import index_pdf, search_pdf
 from app.services.purchase_assistant import analyze_stock
+from app.services.analytics import get_orders_data, get_proposals_data
 
 load_dotenv()
 
 app = FastAPI(title="AI Assistants for Agricultural Dealer")
+
+# Разрешаем запросы из Streamlit (порт 8501)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:8501", "http://127.0.0.1:8501"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 init_db()
 
 # ========== ОБЩИЕ НАСТРОЙКИ ==========
@@ -240,7 +252,7 @@ async def ask_rag(query: str):
         "answer": answer
     }
 
-# ========== НОВЫЙ ЭНДПОИНТ ДЛЯ МОДУЛЯ 4 ==========
+# ========== МОДУЛЬ 4: АССИСТЕНТ ЗАКУПЩИКА ==========
 @app.post("/analyze-stock")
 async def analyze_stock_endpoint(
     stock_file: UploadFile = File(...),
@@ -249,7 +261,6 @@ async def analyze_stock_endpoint(
     sales_file: Optional[UploadFile] = None,
     safety_stock_formula: str = "mean_sales * 2 + min_stock"
 ):
-    # Сохраняем загруженные файлы
     stock_path = os.path.join(UPLOAD_DIR, stock_file.filename)
     with open(stock_path, "wb") as f:
         f.write(await stock_file.read())
@@ -272,7 +283,6 @@ async def analyze_stock_endpoint(
         with open(sales_path, "wb") as f:
             f.write(await sales_file.read())
     
-    # Анализируем
     result = analyze_stock(
         stock_path,
         orders_path,
@@ -282,3 +292,18 @@ async def analyze_stock_endpoint(
     )
     
     return result
+
+# ========== ДАШБОРД ==========
+@app.get("/analytics")
+async def get_analytics():
+    orders = get_orders_data()
+    proposals = get_proposals_data()
+    
+    stats = {
+        "total_orders": len(orders),
+        "total_proposals": len(proposals),
+        "orders_by_region": orders.groupby("region").size().to_dict() if not orders.empty else {},
+        "orders_by_specialization": orders.groupby("specialization").size().to_dict() if not orders.empty else {},
+        "proposals_by_client": proposals.groupby("client_name").size().to_dict() if not proposals.empty else {}
+    }
+    return stats

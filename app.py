@@ -9,7 +9,7 @@ st.set_page_config(page_title="AI Ассистенты для дилера", lay
 
 # --- Боковое меню ---
 st.sidebar.title("Модули")
-page = st.sidebar.radio("Выберите модуль", ["Заявки и КП", "Сервисный ассистент (RAG)", "Ассистент закупщика"])
+page = st.sidebar.radio("Выберите модуль", ["Заявки и КП", "Сервисный ассистент (RAG)", "Ассистент закупщика", "Дашборд"])
 
 # ===================== СТРАНИЦА 1: ЗАЯВКИ И КП =====================
 if page == "Заявки и КП":
@@ -174,3 +174,38 @@ elif page == "Ассистент закупщика":
             st.error(f"Ошибка соединения: {e}")
     elif submitted and not stock_file:
         st.error("Файл остатков обязателен.")
+
+# ===================== СТРАНИЦА 4: ДАШБОРД =====================
+elif page == "Дашборд":
+    st.title("📈 Дашборд аналитики")
+    st.markdown("Статистика по заявкам и коммерческим предложениям.")
+    
+    try:
+        response = requests.get(f"{API_URL}/analytics")
+        st.write(f"**Статус ответа:** {response.status_code}")
+        st.write(f"**Текст ответа:** {response.text}")
+        
+        if response.status_code == 200:
+            data = response.json()
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Всего заявок", data["total_orders"])
+            with col2:
+                st.metric("Всего КП", data["total_proposals"])
+            
+            if data["orders_by_region"]:
+                st.subheader("Заявки по регионам")
+                st.bar_chart(data["orders_by_region"])
+            
+            if data["orders_by_specialization"]:
+                st.subheader("Заявки по специализации")
+                st.bar_chart(data["orders_by_specialization"])
+            
+            if data["proposals_by_client"]:
+                st.subheader("КП по клиентам")
+                st.bar_chart(data["proposals_by_client"])
+        else:
+            st.error(f"Ошибка: сервер вернул код {response.status_code}")
+    except Exception as e:
+        st.error(f"Ошибка соединения: {e}")

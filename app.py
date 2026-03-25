@@ -81,7 +81,6 @@ if page == "Продажа техники":
             except Exception as e:
                 st.error(f"Ошибка соединения: {e}")
 
-    # Кнопка отправки в 1С (появляется после успешной генерации КП)
     if st.session_state.last_proposal_data:
         st.divider()
         st.subheader("📤 Интеграция с 1С")
@@ -95,7 +94,6 @@ if page == "Продажа техники":
                 "proposal_file": st.session_state.last_proposal_file
             }
             try:
-                # Отправляем запрос к эндпоинту 1С (добавим в main.py позже)
                 response = requests.post(f"{API_URL}/send-to-1c", json=order_data)
                 if response.status_code == 200:
                     result = response.json()
@@ -111,8 +109,10 @@ elif page == "Заявки и КП":
     st.title("📝 Оформление заявки на запчасти")
     st.markdown("Заполните форму, и наш ассистент обработает ваш запрос.")
 
-    if "last_order" not in st.session_state:
-        st.session_state.last_order = None
+    if "last_order_data" not in st.session_state:
+        st.session_state.last_order_data = None
+    if "last_order_file" not in st.session_state:
+        st.session_state.last_order_file = None
 
     with st.form("order_form"):
         col1, col2 = st.columns(2)
@@ -151,15 +151,15 @@ elif page == "Заявки и КП":
                 if response.status_code == 200:
                     st.success("Заявка успешно отправлена! Спасибо.")
                     st.balloons()
-                    st.session_state.last_order = payload
+                    st.session_state.last_order_data = payload
                 else:
                     st.error(f"Ошибка при отправке: {response.status_code}")
             except Exception as e:
                 st.error(f"Не удалось соединиться с сервером: {e}")
 
-    if st.session_state.last_order:
+    if st.session_state.last_order_data:
         if st.button("Сформировать коммерческое предложение по этой заявке"):
-            order = st.session_state.last_order
+            order = st.session_state.last_order_data
             params = {
                 "template_name": "template.docx",
                 "client_name": order["model"],
@@ -179,8 +179,31 @@ elif page == "Заявки и КП":
                     st.success(f"КП сгенерировано! Файл: {data['output_file']}")
                     download_url = f"{API_URL}/download/{data['output_file']}"
                     st.markdown(f"[Скачать файл]({download_url})")
+                    st.session_state.last_order_file = data["output_file"]
                 else:
                     st.error(f"Ошибка генерации КП: {response.status_code}")
+            except Exception as e:
+                st.error(f"Ошибка соединения: {e}")
+
+        st.divider()
+        st.subheader("📤 Интеграция с 1С")
+        if st.button("Отправить заказ в 1С (mock)"):
+            order_data = {
+                "client_name": st.session_state.last_order_data["model"],
+                "client_inn": "запчасти",
+                "region": st.session_state.last_order_data["region"],
+                "specialization": st.session_state.last_order_data["specialization"],
+                "description": st.session_state.last_order_data["description"],
+                "proposal_file": st.session_state.last_order_file
+            }
+            try:
+                response = requests.post(f"{API_URL}/send-to-1c", json=order_data)
+                if response.status_code == 200:
+                    result = response.json()
+                    st.success(f"✅ Заказ отправлен в 1С. Номер заказа: {result.get('order_id', 'N/A')}")
+                    st.info(f"Ответ 1С: {result.get('message', '')}")
+                else:
+                    st.error(f"Ошибка отправки в 1С: {response.status_code}")
             except Exception as e:
                 st.error(f"Ошибка соединения: {e}")
 
@@ -188,6 +211,9 @@ elif page == "Заявки и КП":
 elif page == "Сервисный ассистент (RAG)":
     st.title("🔧 Ассистент сервисного инженера")
     st.markdown("Загрузите руководства по ремонту и эксплуатации, затем задавайте вопросы.")
+
+    if "last_rag_data" not in st.session_state:
+        st.session_state.last_rag_data = None
 
     st.subheader("📄 Загрузка руководства")
     uploaded_pdf = st.file_uploader("Выберите PDF-файл", type=["pdf"])
@@ -216,6 +242,11 @@ elif page == "Сервисный ассистент (RAG)":
                     data = response.json()
                     st.markdown("**Ответ:**")
                     st.write(data["answer"])
+                    st.session_state.last_rag_data = {
+                        "query": query,
+                        "answer": data["answer"],
+                        "fragments": data["found_chunks"]
+                    }
                     with st.expander("Показать найденные фрагменты"):
                         for i, chunk in enumerate(data["found_chunks"], 1):
                             st.text(f"[Фрагмент {i}]")
@@ -225,10 +256,36 @@ elif page == "Сервисный ассистент (RAG)":
             except Exception as e:
                 st.error(f"Ошибка соединения: {e}")
 
+    if st.session_state.last_rag_data:
+        st.divider()
+        st.subheader("📤 Интеграция с 1С")
+        if st.button("Создать заявку в 1С (mock)"):
+            order_data = {
+                "client_name": "Сервисный запрос",
+                "client_inn": "RAG",
+                "region": "не указан",
+                "specialization": "ремонт",
+                "description": f"Вопрос: {st.session_state.last_rag_data['query']}\nОтвет: {st.session_state.last_rag_data['answer']}",
+                "proposal_file": "rag_response"
+            }
+            try:
+                response = requests.post(f"{API_URL}/send-to-1c", json=order_data)
+                if response.status_code == 200:
+                    result = response.json()
+                    st.success(f"✅ Заявка создана в 1С. Номер заявки: {result.get('order_id', 'N/A')}")
+                    st.info(f"Ответ 1С: {result.get('message', '')}")
+                else:
+                    st.error(f"Ошибка отправки в 1С: {response.status_code}")
+            except Exception as e:
+                st.error(f"Ошибка соединения: {e}")
+
 # ===================== СТРАНИЦА 3: АССИСТЕНТ ЗАКУПЩИКА =====================
 elif page == "Ассистент закупщика":
     st.title("📊 Ассистент закупщика")
     st.markdown("Загрузите файлы с данными для анализа и получите рекомендации по закупке.")
+
+    if "last_purchase_list" not in st.session_state:
+        st.session_state.last_purchase_list = None
 
     with st.form("purchase_form"):
         stock_file = st.file_uploader("Остатки на складе (Excel)", type=["xlsx"])
@@ -259,6 +316,7 @@ elif page == "Ассистент закупщика":
                     st.subheader("Рекомендуемый список закупки")
                     if data.get("purchase_list"):
                         st.dataframe(data["purchase_list"])
+                        st.session_state.last_purchase_list = data["purchase_list"]
                     else:
                         st.info("Ничего не требуется закупать.")
                     with st.expander("Показать полные данные"):
@@ -269,6 +327,29 @@ elif page == "Ассистент закупщика":
             st.error(f"Ошибка соединения: {e}")
     elif submitted and not stock_file:
         st.error("Файл остатков обязателен.")
+
+    if st.session_state.last_purchase_list:
+        st.divider()
+        st.subheader("📤 Интеграция с 1С")
+        if st.button("Отправить заказ поставщику в 1С (mock)"):
+            order_data = {
+                "client_name": "Поставщик",
+                "client_inn": "PURCHASE",
+                "region": "не указан",
+                "specialization": "закупка",
+                "description": f"Список закупки: {st.session_state.last_purchase_list}",
+                "proposal_file": "purchase_order"
+            }
+            try:
+                response = requests.post(f"{API_URL}/send-to-1c", json=order_data)
+                if response.status_code == 200:
+                    result = response.json()
+                    st.success(f"✅ Заказ поставщику отправлен в 1С. Номер заказа: {result.get('order_id', 'N/A')}")
+                    st.info(f"Ответ 1С: {result.get('message', '')}")
+                else:
+                    st.error(f"Ошибка отправки в 1С: {response.status_code}")
+            except Exception as e:
+                st.error(f"Ошибка соединения: {e}")
 
 # ===================== СТРАНИЦА 4: ДАШБОРД =====================
 elif page == "Дашборд":

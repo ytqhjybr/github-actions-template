@@ -1,0 +1,20 @@
+from docx import Document
+
+doc = Document()
+doc.add_paragraph("Коммерческое предложение № {{proposal_number}} от {{date}}")
+doc.add_paragraph("Клиент: {{client_name}}")
+doc.add_paragraph("Регион: {{region}}")
+doc.add_paragraph("Специализация: {{specialization}}")
+doc.add_paragraph("Уважаемый {{client_name}}!")
+doc.add_paragraph("Благодарим вас за обращение. На основе ваших требований мы подготовили следующее коммерческое предложение.")
+doc.add_paragraph("=== Текст предложения ===")
+doc.add_paragraph("{{proposal_text}}")
+doc.add_paragraph("Итоговая стоимость: {{total_cost}} руб.")
+doc.add_paragraph("Условия поставки:")
+doc.add_paragraph("- Срок поставки: {{delivery_terms}}")
+doc.add_paragraph("- Оплата: {{payment_terms}}")
+doc.add_paragraph("- Гарантия: {{warranty_terms}}")
+doc.add_paragraph("С уважением, Команда AI-Ассистентов")
+
+doc.save("data/uploads/template.docx")
+print("Шаблон template.docx создан")

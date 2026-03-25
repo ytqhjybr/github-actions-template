@@ -12,12 +12,13 @@ from app.services.proposal_generator import generate_proposal_text
 from app.services.rag_service import index_pdf, search_pdf
 from app.services.purchase_assistant import analyze_stock
 from app.services.analytics import get_orders_data, get_proposals_data
+from datetime import datetime
+from integrations.one_c_mock import mock_1c
 
 load_dotenv()
 
 app = FastAPI(title="AI Assistants for Agricultural Dealer")
 
-# Разрешаем запросы из Streamlit (порт 8501)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:8501", "http://127.0.0.1:8501"],
@@ -149,7 +150,8 @@ async def generate_from_template(
                     cell.text = cell.text.replace("{{proposal_text}}", proposal_text)
 
     os.makedirs("data/proposals", exist_ok=True)
-    output_filename = f"proposal_{client_name}.docx"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_filename = f"proposal_{timestamp}.docx"
     output_path = os.path.join("data/proposals", output_filename)
     doc.save(output_path)
 
@@ -307,3 +309,21 @@ async def get_analytics():
         "proposals_by_client": proposals.groupby("client_name").size().to_dict() if not proposals.empty else {}
     }
     return stats
+
+# ========== ИНТЕГРАЦИЯ С 1С (MOCK) ==========
+class OrderTo1C(BaseModel):
+    client_name: str
+    client_inn: str
+    region: str
+    specialization: str
+    description: str
+    proposal_file: str
+
+@app.post("/send-to-1c")
+async def send_to_1c(order: OrderTo1C):
+    result = mock_1c.create_order(order.dict())
+    return {
+        "status": "sent",
+        "order_id": result.get("order_id"),
+        "message": f"Заказ для {order.client_name} передан в 1С"
+    }

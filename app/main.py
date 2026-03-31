@@ -12,8 +12,6 @@ from app.services.proposal_generator import generate_proposal_text
 from app.services.rag_service import index_pdf, search_pdf
 from app.services.purchase_assistant import analyze_stock
 from app.services.analytics import get_orders_data, get_proposals_data
-from datetime import datetime
-from integrations.one_c_mock import mock_1c
 
 load_dotenv()
 
@@ -29,11 +27,8 @@ app.add_middleware(
 
 init_db()
 
-# ========== ОБЩИЕ НАСТРОЙКИ ==========
 UPLOAD_DIR = "data/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
-
-# ========== ЭНДПОИНТЫ ==========
 
 @app.get("/")
 async def root():
@@ -116,14 +111,19 @@ async def generate_from_template(
         if not os.path.exists(price_list_path):
             raise HTTPException(status_code=404, detail="Прайс-лист не найден")
 
-    proposal_text = "Текст КП (заглушка)"
-    if generate_proposal_text:
-        proposal_text = generate_proposal_text(
-            region=region,
-            specialization=specialization,
-            price_list_path=price_list_path,
-            additional_params=additional_params
-        )
+    spec_path = None
+    client_inn = None
+    if additional_params:
+        spec_path = additional_params.get("spec_path")
+        client_inn = additional_params.get("client_inn")
+
+    proposal_text = generate_proposal_text(
+        region=region,
+        specialization=specialization,
+        price_list_path=price_list_path,
+        spec_path=spec_path,
+        additional_params=additional_params
+    )
 
     doc = Document(template_path)
 
@@ -136,6 +136,8 @@ async def generate_from_template(
             paragraph.text = paragraph.text.replace("{{specialization}}", specialization)
         if "{{proposal_text}}" in paragraph.text:
             paragraph.text = paragraph.text.replace("{{proposal_text}}", proposal_text)
+        if "{{client_inn}}" in paragraph.text and client_inn:
+            paragraph.text = paragraph.text.replace("{{client_inn}}", client_inn)
 
     for table in doc.tables:
         for row in table.rows:
@@ -148,10 +150,11 @@ async def generate_from_template(
                     cell.text = cell.text.replace("{{specialization}}", specialization)
                 if "{{proposal_text}}" in cell.text:
                     cell.text = cell.text.replace("{{proposal_text}}", proposal_text)
+                if "{{client_inn}}" in cell.text and client_inn:
+                    cell.text = cell.text.replace("{{client_inn}}", client_inn)
 
     os.makedirs("data/proposals", exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_filename = f"proposal_{timestamp}.docx"
+    output_filename = f"proposal_{client_name}.docx"
     output_path = os.path.join("data/proposals", output_filename)
     doc.save(output_path)
 
@@ -162,13 +165,17 @@ async def generate_from_template(
     }
 
 class OrderRequest(BaseModel):
-    vin: str
-    model: str
-    year: str
+    type: Optional[str] = None
+    vin: Optional[str] = None
+    model: Optional[str] = None
+    year: Optional[str] = None
     description: str
     photo_path: Optional[str] = None
     region: str = "Московская область"
     specialization: str = "растениеводство"
+    client_name: Optional[str] = None
+    client_inn: Optional[str] = None
+    spec_path: Optional[str] = None
 
 @app.post("/save-order")
 async def save_order(order: OrderRequest):
@@ -254,7 +261,6 @@ async def ask_rag(query: str):
         "answer": answer
     }
 
-# ========== МОДУЛЬ 4: АССИСТЕНТ ЗАКУПЩИКА ==========
 @app.post("/analyze-stock")
 async def analyze_stock_endpoint(
     stock_file: UploadFile = File(...),
@@ -295,7 +301,6 @@ async def analyze_stock_endpoint(
     
     return result
 
-# ========== ДАШБОРД ==========
 @app.get("/analytics")
 async def get_analytics():
     orders = get_orders_data()
@@ -309,21 +314,3 @@ async def get_analytics():
         "proposals_by_client": proposals.groupby("client_name").size().to_dict() if not proposals.empty else {}
     }
     return stats
-
-# ========== ИНТЕГРАЦИЯ С 1С (MOCK) ==========
-class OrderTo1C(BaseModel):
-    client_name: str
-    client_inn: str
-    region: str
-    specialization: str
-    description: str
-    proposal_file: str
-
-@app.post("/send-to-1c")
-async def send_to_1c(order: OrderTo1C):
-    result = mock_1c.create_order(order.dict())
-    return {
-        "status": "sent",
-        "order_id": result.get("order_id"),
-        "message": f"Заказ для {order.client_name} передан в 1С"
-    }

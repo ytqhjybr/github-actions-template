@@ -5,13 +5,21 @@ def generate_proposal_text(
     region: str,
     specialization: str,
     price_list_path: Optional[str] = None,
+    spec_path: Optional[str] = None,
     additional_params: dict = None
 ) -> str:
     """
-    Генерация текста КП с использованием данных прайс-листа.
+    Генерация текста КП с использованием данных прайс-листа (если он загружен).
+    Если прайс-лист не передан, возвращает заглушку.
     """
+    # Базовый текст
     text = f"Сформировано предложение для региона {region}, специализация {specialization}.\n"
 
+    # Если есть спецификация, добавляем информацию о ней
+    if spec_path:
+        text += f"\nЗагружена спецификация: {spec_path}\n"
+
+    # Если есть прайс-лист, добавляем позиции
     if price_list_path:
         try:
             items = read_price_list(price_list_path)
@@ -30,8 +38,12 @@ def generate_proposal_text(
     else:
         text += "Прайс-лист не предоставлен, формирую тестовое предложение.\n"
 
+    # Дополнительные параметры (VIN, год, описание, ИНН)
     if additional_params:
-        text += f"Дополнительные параметры: {additional_params}\n"
+        text += f"\nДополнительные параметры:\n"
+        for key, value in additional_params.items():
+            if value:
+                text += f"- {key}: {value}\n"
 
     text += "\nЭто текст-заглушка. Позже здесь будет сгенерированное LLM описание техники и экономическое обоснование."
     return text
